@@ -12,7 +12,7 @@ from pathlib import Path
 ROUTE_ID = 86
 
 AUDIO_ROOT = Path(
-    r"C:\Users\sithm\OneDrive\Desktop\AudioAuracast"
+    r"\AudioAuracast"
 )
 
 MAGIC = b"AU"
@@ -34,6 +34,35 @@ class Stop:
     audio_stem: str
     direction: int = DIRECTION_OUTBOUND
     language: int = LANGUAGE_ENGLISH
+
+    @property
+    def audio_path(self) -> Path:
+        """
+        Automatically find the audio file for this stop.
+
+        Supported formats:
+        .mp3
+        .mp4
+        .m4a
+        .wav
+        """
+
+        folder_path = AUDIO_ROOT / self.folder
+
+        for extension in (
+            ".mp3",
+            ".mp4",
+            ".m4a",
+            ".wav"
+        ):
+            candidate = folder_path / f"{self.audio_stem}{extension}"
+
+            if candidate.exists():
+                return candidate
+
+        # Return the expected MP3 path if no file was found.
+        # This keeps later error messages meaningful.
+        return folder_path / f"{self.audio_stem}.mp3"
 
 
 # ============================================================
@@ -79,6 +108,11 @@ if __name__ == "__main__":
 
         print(
             f"{stop.index}: "
-            f"{stop.name} "
-            f"({stop.folder}/{stop.audio_stem})"
+            f"{stop.name}"
         )
+
+        print(
+            f"Audio: {stop.audio_path}"
+        )
+
+        print()
