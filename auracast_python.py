@@ -4,8 +4,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-import serial 
-from serial.tools import list_ports
+
 
 
 # ============================================================
@@ -425,99 +424,8 @@ def matches_expected_stop(
         and data["language"]
         == expected.language
     )
-# ============================================================
-# FMA120 SERIAL CONFIGURATION
-# ============================================================
 
-class FMA120:
-    """
-    Talks to the FMA120 over USB / serial (COM port).
-
-    Sends AT-style commands and provisions a single
-    Route 86 stop (Broadcast Name, Code, ID, BF metadata).
-    """
-
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 2.0):
-        # Open the serial connection to the FMA120.
-        self.serial = serial.Serial(
-            port,
-            baudrate,
-            timeout=timeout
-        )
-
-    def command(self, text: str) -> str:
-        """
-        Send one command to the FMA120 and return its reply.
-        """
-
-        # Commands are sent as text followed by a newline.
-        self.serial.write(
-            (text + "\r\n").encode()
-        )
-
-        # Read whatever the device sends back.
-        response = self.serial.readline().decode().strip()
-
-        print(f"{text} -> {response}")
-
-        return response
-
-    def require_ok(self, text: str) -> None:
-        """
-        Send a command and raise an error if the FMA120
-        does not confirm success.
-        """
-
-        response = self.command(text)
-
-        if "OK" not in response.upper():
-            raise RuntimeError(
-                f"FMA120 rejected command: {text} (got: {response})"
-            )
-
-    def provision(self, stop: Stop, company_id: int) -> None:
-        """
-        Configure the FMA120 as one Route 86 stop.
-        """
-
-        bf = build_bf_hex(
-            stop,
-            company_id
-        )
-
-        # Broadcast Name
-        self.require_ok(
-            f"BN={stop.broadcast_name}"
-        )
-
-        # Broadcast Code
-        self.require_ok(
-            f"BE={SHARED_BROADCAST_CODE}"
-        )
-
-        # Broadcast ID
-        self.require_ok(
-            f"BI={stop.broadcast_id}"
-        )
-
-        # BF metadata
-        self.require_ok(
-            f"BF={bf}"
-        )
-
-        print(
-            "\nVerification"
-        )
-
-        self.command("BN")
-        self.command("BI")
-        self.command("BF")
-
-    def close(self) -> None:
-        # Always close the serial connection when finished.
-        self.serial.close()
-
-
+    
 # ============================================================
 # TEST CURRENT FEATURES
 # ============================================================
