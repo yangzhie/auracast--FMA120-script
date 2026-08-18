@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,7 +55,6 @@ class Stop:
             if candidate.exists():
                 return candidate
 
-        # Return the expected MP3 path if no supported file was found.
         return folder_path / f"{self.audio_stem}.mp3"
 
     @property
@@ -73,7 +73,7 @@ class Stop:
         """
         Generate a unique broadcast ID for each stop.
 
-        ROUTE_ID 86 = 0x56, therefore:
+        Route 86 = 0x56:
         Stop 1 -> 560001
         Stop 2 -> 560002
         Stop 3 -> 560003
@@ -87,31 +87,84 @@ class Stop:
 # ============================================================
 
 STOPS = {
-    1: Stop(
-        index=1,
-        name="Stop 1",
-        folder="Stop 1",
-        audio_stem="audio1"
-    ),
-    2: Stop(
-        index=2,
-        name="Stop 2",
-        folder="Stop 2",
-        audio_stem="audio2"
-    ),
-    3: Stop(
-        index=3,
-        name="Stop 3",
-        folder="Stop 3",
-        audio_stem="audio3"
-    ),
-    4: Stop(
-        index=4,
-        name="Stop 4",
-        folder="Stop 4",
-        audio_stem="audio4"
-    )
+    1: Stop(1, "Stop 1", "Stop 1", "audio1"),
+    2: Stop(2, "Stop 2", "Stop 2", "audio2"),
+    3: Stop(3, "Stop 3", "Stop 3", "audio3"),
+    4: Stop(4, "Stop 4", "Stop 4", "audio4"),
 }
+
+
+# ============================================================
+# COMPANY ID
+# ============================================================
+
+def parse_company_id(value: str) -> int:
+    """
+    Parse a hexadecimal Bluetooth Company ID.
+
+    Examples:
+        "1234"
+        "0x1234"
+    """
+    value = value.lower().replace("0x", "")
+    company_id = int(value, 16)
+
+    if not 0 <= company_id <= 0xFFFF:
+        raise ValueError("Company ID must fit in 16 bits")
+
+    return company_id
+
+
+# ============================================================
+# PROJECT METADATA
+# ============================================================
+
+def build_project_payload(stop: Stop) -> bytes:
+    """
+    Build the custom project payload.
+
+    Layout:
+        AU | version | route_id (little-endian) |
+        stop_id | direction | language | audio_id
+    """
+    return (
+        MAGIC
+        + bytes([PROTOCOL_VERSION])
+        + struct.pack("<H", ROUTE_ID)
+        + bytes([
+            stop.index,
+            stop.direction,
+            stop.language,
+            stop.index,
+        ])
+    )
+
+
+# ============================================================
+# BF METADATA
+# ============================================================
+
+def build_bf_hex(stop: Stop, company_id: int) -> str:
+    """
+    Build the BF manufacturer-specific advertising data.
+
+    Layout:
+        Length
+        0xFF
+        Company ID (little-endian)
+        Project payload
+    """
+    project_payload = build_project_payload(stop)
+
+    after_length = (
+        bytes([0xFF])
+        + struct.pack("<H", company_id)
+        + project_payload
+    )
+
+    full_payload = bytes([len(after_length)]) + after_length
+
+    return full_payload.hex().upper()
 
 
 # ============================================================
@@ -119,15 +172,18 @@ STOPS = {
 # ============================================================
 
 if __name__ == "__main__":
+    # Temporary Company ID used only to demonstrate BF generation.
+    test_company_id = 0x1234
 
     print(f"Route {ROUTE_ID}")
     print()
 
     for stop in STOPS.values():
+        bf = build_bf_hex(stop, test_company_id)
 
         print(f"Stop: {stop.index}")
-        print(f"Name: {stop.name}")
         print(f"Broadcast Name: {stop.broadcast_name}")
         print(f"Broadcast ID: {stop.broadcast_id}")
         print(f"Audio: {stop.audio_path}")
+        print(f"BF: {bf}")
         print()
