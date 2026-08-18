@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+
 # ============================================================
 # PROJECT CONFIGURATION
 # ============================================================
@@ -18,10 +19,8 @@ AUDIO_ROOT = Path(
 
 MAGIC = b"AU"
 PROTOCOL_VERSION = 1
-
 DIRECTION_OUTBOUND = 0
 LANGUAGE_ENGLISH = 1
-
 
 # ============================================================
 # STOP MODEL
@@ -424,11 +423,11 @@ def matches_expected_stop(
         == expected.language
     )
 
-
+    
 # ============================================================
 # TEST CURRENT FEATURES
 # ============================================================
-
+ 
 if __name__ == "__main__":
 
     # Temporary Company ID used only for testing
@@ -483,3 +482,5 @@ if __name__ == "__main__":
         print(
             "Journey complete"
         )
+        #FMA120 serial configuration
+
