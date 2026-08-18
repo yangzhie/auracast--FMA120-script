@@ -21,8 +21,6 @@ MAGIC = b"AU"
 PROTOCOL_VERSION = 1
 DIRECTION_OUTBOUND = 0
 LANGUAGE_ENGLISH = 1
-SHARED_BROADCAST_CODE = "AURA86DEMO2026"
-
 
 # ============================================================
 # STOP MODEL
