@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import struct
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -527,25 +528,236 @@ def list_serial_ports():
 
 
 # ============================================================
+# AUDIO DEVICE DISCOVERY
+# ============================================================
+
+def list_audio_devices():
+    """
+    Display the available audio output devices.
+
+    The main purpose is to identify the FMA120
+    USB audio output so Python can send the
+    correct stop announcement to the transmitter.
+    """
+
+    import pygame
+
+    from pygame._sdl2 import (
+        audio as sdl2_audio
+    )
+
+    # Initialise pygame so audio devices can be queried.
+    pygame.init()
+
+    # False means output / playback devices.
+    devices = (
+        sdl2_audio
+        .get_audio_device_names(
+            False
+        )
+    )
+
+    for index, name in enumerate(
+        devices
+    ):
+
+        print(
+            f"[{index}] {name}"
+        )
+
+
+# ============================================================
+# AUDIO PLAYBACK
+# ============================================================
+
+def play_audio(
+    stop: Stop,
+    audio_device: str | None,
+    once: bool = False
+):
+    """
+    Play the audio file associated with a stop.
+
+    The selected audio output should normally be
+    the FMA120 USB audio device.
+
+    Signal flow:
+
+        audio file
+            |
+            v
+        Python / pygame
+            |
+            v
+        FMA120 USB Audio
+            |
+            v
+        FMA120
+            |
+            v
+        Auracast broadcast
+
+    If once=False, the announcement loops.
+    If once=True, it plays one time only.
+    """
+
+    import pygame
+
+    # Automatically resolve the audio file for
+    # the selected stop.
+    audio_file = (
+        stop.audio_path
+    )
+
+    # Stop immediately if the audio file does
+    # not exist.
+    if not audio_file.exists():
+
+        raise FileNotFoundError(
+            audio_file
+        )
+
+    # Reset any existing mixer session before
+    # selecting a new output device.
+    pygame.mixer.quit()
+
+    # Initialise the audio output.
+    pygame.mixer.init(
+        frequency=48000,
+        size=-16,
+        channels=2,
+        buffer=1024,
+        devicename=audio_device
+    )
+
+    # Load the stop announcement.
+    pygame.mixer.music.load(
+        str(audio_file)
+    )
+
+    # Play once or loop continuously.
+    pygame.mixer.music.play(
+        0 if once else -1
+    )
+
+    print(
+        f"Playing {audio_file} "
+        f"-> "
+        f"{audio_device or 'default output'}"
+    )
+
+    print(
+        "Press Ctrl+C to stop"
+    )
+
+    try:
+
+        # Keep the Python process alive while
+        # the audio is playing.
+        while (
+            pygame
+            .mixer
+            .music
+            .get_busy()
+        ):
+
+            time.sleep(
+                0.25
+            )
+
+    except KeyboardInterrupt:
+
+        # Ctrl+C allows the user to stop playback.
+        pass
+
+    finally:
+
+        # Always stop and release the mixer cleanly.
+        pygame.mixer.music.stop()
+        pygame.mixer.quit()
+
+
+# ============================================================
 # TEST CURRENT FEATURES
 # ============================================================
 
-
 if __name__ == "__main__":
-    # Temporary Company ID used only for demonstrating metadata.
+
+    # Temporary Company ID used only for
+    # metadata testing.
     test_company_id = 0x1234
+
+    # Use Stop 2 as an example.
     stop = STOPS[2]
-    bf = build_bf_hex(stop, test_company_id)
 
-    print(f"Route: {ROUTE_ID}")
-    print(f"Stop: {stop.name}")
-    print(f"Broadcast Name: {stop.broadcast_name}")
-    print(f"Broadcast Code: {SHARED_BROADCAST_CODE}")
-    print(f"Broadcast ID: {stop.broadcast_id}")
-    print(f"BF: {bf}")
-    print(f"Decoded BF: {decode_bf_hex(bf)}")
+    # Build Stop 2 BF metadata.
+    bf = build_bf_hex(
+        stop,
+        test_company_id
+    )
 
-    print("\nAvailable serial ports:")
+    print(
+        f"Route: {ROUTE_ID}"
+    )
+
+    print(
+        f"Stop: {stop.name}"
+    )
+
+    print(
+        f"Broadcast Name: "
+        f"{stop.broadcast_name}"
+    )
+
+    print(
+        f"Broadcast Code: "
+        f"{SHARED_BROADCAST_CODE}"
+    )
+
+    print(
+        f"Broadcast ID: "
+        f"{stop.broadcast_id}"
+    )
+
+    print(
+        f"BF: {bf}"
+    )
+
+    print(
+        f"Decoded BF: "
+        f"{decode_bf_hex(bf)}"
+    )
+
+    print(
+        "\nAvailable serial ports:"
+    )
+
     list_serial_ports()
 
-    print("\nFMA120 serial configuration support is ready.")
+    print(
+        "\nAvailable audio output devices:"
+    )
+
+    # This shows the available playback devices.
+    # The user can identify the FMA120 USB audio
+    # output from this list.
+    try:
+        list_audio_devices()
+
+    except Exception as error:
+
+        # Keep metadata/serial testing usable even
+        # if pygame or an audio device is unavailable.
+        print(
+            f"Could not list audio devices: {error}"
+        )
+
+    print(
+        "\nAudio playback support is ready."
+    )
+
+    print(
+        "The full play/provision/run commands "
+        "will be connected through the CLI "
+        "in the next commit."
+    )
