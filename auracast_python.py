@@ -5,6 +5,9 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+import serial
+from serial.tools import list_ports
+
 
 # ============================================================
 # PROJECT CONFIGURATION
@@ -12,8 +15,11 @@ from pathlib import Path
 
 ROUTE_ID = 86
 
+# Shared Broadcast Code used by all four stops in the current PoC.
+SHARED_BROADCAST_CODE = "AURA86DEMO2026"
+
 AUDIO_ROOT = Path(
-    r"./AudioAuracast"
+    r"C:\Users\sithm\OneDrive\Desktop\AudioAuracast"
 )
 
 MAGIC = b"AU"
@@ -426,60 +432,120 @@ def matches_expected_stop(
 
 
 # ============================================================
+# FMA120 SERIAL CONTROL
+# ============================================================
+
+class FMA120:
+    """Control one physical FMA120 through its serial / COM port."""
+
+    def __init__(self, port: str):
+        """Open the FMA120 serial control connection."""
+        self.ser = serial.Serial(
+            port,
+            921600,
+            bytesize=8,
+            parity="N",
+            stopbits=1,
+            timeout=2,
+            write_timeout=2
+        )
+        self.ser.reset_input_buffer()
+        self.ser.reset_output_buffer()
+
+    def close(self):
+        """Close the serial connection."""
+        self.ser.close()
+
+    def command(self, body: str) -> list[str]:
+        """Send a BC command and return the FMA120 response lines."""
+        # Commands are sent as: BC:<command> followed by CRLF.
+        packet = f"BC:{body}\r\n".encode("ascii")
+        print(f"TX  BC:{body}")
+        self.ser.write(packet)
+        self.ser.flush()
+
+        responses = []
+        while True:
+            raw = self.ser.readline()
+            if not raw:
+                break
+
+            text = raw.decode("ascii", errors="replace").strip()
+            if text:
+                print(f"RX  {text}")
+                responses.append(text)
+
+        return responses
+
+    def require_ok(self, body: str):
+        """Send a command and require an OK response."""
+        responses = self.command(body)
+        if "OK" not in responses:
+            raise RuntimeError(
+                f"No OK for BC:{body}; got {responses}"
+            )
+
+    def provision(self, stop: Stop, company_id: int):
+        """
+        Configure this FMA120 as one Route 86 stop.
+
+        BN = Broadcast Name
+        BE = Broadcast Code
+        BI = Broadcast ID
+        BF = Route / stop metadata
+        """
+        # Generate the custom BF metadata for this stop.
+        bf = build_bf_hex(stop, company_id)
+
+        # 1. Set the human-readable Broadcast Name.
+        self.require_ok(f"BN={stop.broadcast_name}")
+
+        # 2. Set the shared Broadcast Code used by the PoC.
+        self.require_ok(f"BE={SHARED_BROADCAST_CODE}")
+
+        # 3. Set the unique Broadcast ID for this stop.
+        self.require_ok(f"BI={stop.broadcast_id}")
+
+        # 4. Set the custom BF metadata containing Route and Stop IDs.
+        self.require_ok(f"BF={bf}")
+
+        # Read values back to verify the configuration.
+        print("Verification:")
+        self.command("BN")
+        self.command("BI")
+        self.command("BF")
+
+
+# ============================================================
+# SERIAL PORT DISCOVERY
+# ============================================================
+
+def list_serial_ports():
+    """List serial / COM ports so the FMA120 port can be identified."""
+    for port in list_ports.comports():
+        print(port.device, port.description)
+
+
+# ============================================================
 # TEST CURRENT FEATURES
 # ============================================================
 
+
 if __name__ == "__main__":
-
-    # Temporary Company ID used only for testing
-    # the metadata generation and decoding.
+    # Temporary Company ID used only for demonstrating metadata.
     test_company_id = 0x1234
+    stop = STOPS[2]
+    bf = build_bf_hex(stop, test_company_id)
 
-    # Simulate detecting the transmitter for Stop 2.
-    detected_stop = STOPS[2]
+    print(f"Route: {ROUTE_ID}")
+    print(f"Stop: {stop.name}")
+    print(f"Broadcast Name: {stop.broadcast_name}")
+    print(f"Broadcast Code: {SHARED_BROADCAST_CODE}")
+    print(f"Broadcast ID: {stop.broadcast_id}")
+    print(f"BF: {bf}")
+    print(f"Decoded BF: {decode_bf_hex(bf)}")
 
-    # Generate Stop 2 BF metadata.
-    bf = build_bf_hex(
-        detected_stop,
-        test_company_id
-    )
+    print("\nAvailable serial ports:")
+    list_serial_ports()
 
-    print(
-        f"BF: {bf}"
-    )
-
-    # Decode the generated metadata to confirm
-    # that all fields can be recovered correctly.
-    print(
-        f"Decoded BF: "
-        f"{decode_bf_hex(bf)}"
-    )
-
-    print()
-
-    # Assume Stop 1 has already been completed.
-    # Therefore the expected next stop is Stop 2.
-    expected = (
-        expected_next_stop(1)
-    )
-
-    if expected is not None:
-
-        print(
-            f"Expected next stop: "
-            f"{expected.name}"
-        )
-
-        print(
-            "Detected stop matches expected stop:",
-            matches_expected_stop(
-                bf,
-                expected
-            )
-        )
-
-    else:
-
-        print(
-            "Journey complete"
-        )
+    print("\nFMA120 serial configuration support is ready.")
